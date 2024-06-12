@@ -8,11 +8,9 @@ import java.util.regex.*;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-
 import net.sourceforge.jdatepicker.impl.JDatePanelImpl;
 import net.sourceforge.jdatepicker.impl.JDatePickerImpl;
 import net.sourceforge.jdatepicker.impl.UtilDateModel;
-
 
 public class PanelFactory {
     private static JDatePickerImpl datePicker;
@@ -22,6 +20,8 @@ public class PanelFactory {
     private static JPanel membersPanel;
     private static ButtonGroup group;
     private static boolean isFileParsedSuccessfully = false;
+    private static JTextArea presetTextArea;
+
     public static JPanel createStartPanel(CardLayout layout, JPanel panel) {
         JPanel startPanel = new JPanel();
         startPanel.setLayout(null);
@@ -90,6 +90,20 @@ public class PanelFactory {
         gbc.weightx = 0;
         centerPanel.add(browseButton, gbc);
 
+        presetTextArea = new JTextArea(10, 40);
+        presetTextArea.setEditable(false);
+        presetTextArea.setBackground(Color.WHITE);
+        presetTextArea.setBorder(BorderFactory.createLineBorder(navyColor, 2));
+        presetTextArea.setFont(new Font("Monospaced", Font.PLAIN, 16));
+        JScrollPane scrollPane = new JScrollPane(presetTextArea);
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        gbc.gridwidth = 2;
+        gbc.weightx = 1.0;
+        gbc.weighty = 1.0;
+        gbc.fill = GridBagConstraints.BOTH;
+        centerPanel.add(scrollPane, gbc);
+
         importPresetPanel.add(centerPanel, BorderLayout.CENTER);
 
         JButton setPeriodButton = new JButton("Set Period");
@@ -120,6 +134,7 @@ public class PanelFactory {
                         JOptionPane.showMessageDialog(null, "File format is incorrect.", "Error", JOptionPane.ERROR_MESSAGE);
                     } else {
                         JOptionPane.showMessageDialog(null, "Preset imported successfully.", "Success", JOptionPane.INFORMATION_MESSAGE);
+                        layout.show(panel, "ShowPresetPanel");
                     }
                 }
             }
@@ -137,16 +152,48 @@ public class PanelFactory {
         return importPresetPanel;
     }
 
+    public static JPanel createShowPresetPanel() {
+        JPanel showPresetPanel = new JPanel(new BorderLayout());
+        showPresetPanel.setBackground(Color.WHITE);
+
+        JLabel titleLabel = new JLabel("Preset Content", SwingConstants.CENTER);
+        titleLabel.setFont(new Font("Arial", Font.BOLD, 24));
+        titleLabel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        showPresetPanel.add(titleLabel, BorderLayout.NORTH);
+
+        JTextArea presetTextArea = new JTextArea();
+        presetTextArea.setFont(new Font("Monospaced", Font.PLAIN, 14));
+        presetTextArea.setEditable(false);
+        JScrollPane scrollPane = new JScrollPane(presetTextArea);
+        showPresetPanel.add(scrollPane, BorderLayout.CENTER);
+
+        JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        bottomPanel.setBackground(Color.WHITE);
+
+        JButton backButton = new JButton("Back");
+        backButton.setFont(new Font("Arial", Font.PLAIN, 18));
+        backButton.setPreferredSize(new Dimension(120, 50));
+        backButton.setBackground(Color.WHITE);
+        backButton.setBorder(BorderFactory.createLineBorder(Color.decode("#000080"), 2));
+        backButton.addActionListener(e -> ((CardLayout) showPresetPanel.getParent().getLayout()).show(showPresetPanel.getParent(), "ImportPresetPanel"));
+        bottomPanel.add(backButton);
+
+        showPresetPanel.add(bottomPanel, BorderLayout.SOUTH);
+
+        return showPresetPanel;
+    }
+
     private static boolean parsePresetFile(String filePath) {
         try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+            StringBuilder contentBuilder = new StringBuilder();
             String line;
             DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
             members.clear();
-            AutoScheduler.timetable = new Timetable();
 
             Member member = null;
 
             while ((line = reader.readLine()) != null) {
+                contentBuilder.append(line).append("\n");
                 line = line.trim();
                 if (line.startsWith("#") || line.isEmpty()) {
                     continue;
@@ -204,22 +251,18 @@ public class PanelFactory {
                             }
                         }
                     }
-                } else if (line.startsWith("<")) {
-                    line = line.replace("<", "").replace(">", "").trim();
-                    String[] keyValue = line.split(" : ");
-                    if (keyValue.length < 2) return false;
-                    LocalDateTime date = LocalDate.parse(keyValue[0].trim(), dateFormatter).atStartOfDay();
-                    String[] times = keyValue[1].trim().split(", ");
-                    for (String time : times) {
-                        AutoScheduler.timetable.days[date.getDayOfWeek().getValue() - 1]
-                                .computeIfAbsent(date, k -> new HashSet<>()).add(time);
-                    }
                 }
             }
 
             if (member != null) {
                 members.add(member);
             }
+
+            // Set the parsed content to the JTextArea
+            presetTextArea.setText(contentBuilder.toString());
+
+            // Update Manage Member Panel
+            updateMembersPanel();
 
             return true;
         } catch (IOException | RuntimeException e) {
@@ -229,21 +272,23 @@ public class PanelFactory {
     }
 
     private static void updateMembersPanel() {
-        membersPanel.removeAll();
-        group.clearSelection();
+        if (membersPanel != null && group != null) {
+            membersPanel.removeAll();
+            group.clearSelection();
 
-        for (int i = 0; i < members.size(); i++) {
-            Member member = members.get(i);
-            JCheckBox checkBox = new JCheckBox(member.getName());
-            checkBox.setActionCommand(String.valueOf(i));
-            checkBox.setBackground(Color.WHITE);
-            checkBox.setFont(new Font("Malgun Gothic", Font.PLAIN, 16));
-            group.add(checkBox);
-            membersPanel.add(checkBox);
+            for (int i = 0; i < members.size(); i++) {
+                Member member = members.get(i);
+                JCheckBox checkBox = new JCheckBox(member.getName());
+                checkBox.setActionCommand(String.valueOf(i));
+                checkBox.setBackground(Color.WHITE);
+                checkBox.setFont(new Font("Malgun Gothic", Font.PLAIN, 16));
+                group.add(checkBox);
+                membersPanel.add(checkBox);
+            }
+
+            membersPanel.revalidate();
+            membersPanel.repaint();
         }
-
-        membersPanel.revalidate();
-        membersPanel.repaint();
     }
 
     public static JPanel createSetPeriodPanel(CardLayout layout, JPanel panel) {
@@ -307,7 +352,7 @@ public class PanelFactory {
                 JOptionPane.showMessageDialog(panel, "Selected: " + formattedSDate + " to " + formattedEDate);
 
                 for (int i = 0; i < 7; i++) {
-                    AutoScheduler.timetable.days[i].put(sDate.plusDays(i), new HashSet<>());
+                    AutoScheduler.timetable.days.put(i, new HashMap<>());
                 }
 
                 panel.add(createSetTimetablePanel(layout, panel), "SetTimetablePanel");
@@ -411,12 +456,12 @@ public class PanelFactory {
                 String startEndTime = startEndTimeField.getText();
                 Matcher matcher = timePattern.matcher(startEndTime);
                 if (matcher.matches()) {
-                    AutoScheduler.timetable.days[index].get(sDate.plusDays(index)).add(startEndTime);
+                    AutoScheduler.timetable.addTimeRange(index, sDate.plusDays(index), startEndTime);
                     String currentText = workingHoursField.getText();
                     if (currentText.equals(" // Add Working Hour to click Add button.")) {
                         workingHoursField.setText(startEndTime);
                     } else {
-                        workingHoursField.setText(String.join(", ", AutoScheduler.timetable.days[index].get(sDate.plusDays(index))));
+                        workingHoursField.setText(String.join(", ", AutoScheduler.timetable.getTimeRanges(index, sDate.plusDays(index))));
                     }
                     startEndTimeField.setText("");
                 } else {
@@ -741,6 +786,7 @@ public class PanelFactory {
     public static JPanel createWorkTimetablePanel(CardLayout layout, JPanel panel) {
         JPanel workTimetablePanel = new JPanel(new BorderLayout());
         workTimetablePanel.setBackground(Color.WHITE);
+        workTimetablePanel.setPreferredSize(new Dimension(800, 600)); // Increase the height here
 
         JLabel titleLabel = new JLabel("Work Timetable", SwingConstants.LEFT);
         titleLabel.setFont(new Font("Arial", Font.BOLD, 24));
@@ -749,27 +795,9 @@ public class PanelFactory {
 
         JPanel timetablePanel = new JPanel(new GridBagLayout());
         timetablePanel.setBackground(Color.WHITE);
-        GridBagConstraints gbc = new GridBagConstraints();
-        gbc.insets = new Insets(5, 5, 5, 5);
-        gbc.gridx = 0;
-        gbc.gridy = 0;
-        gbc.anchor = GridBagConstraints.WEST;
 
-        JLabel dateLabel = new JLabel("Date");
-        dateLabel.setFont(new Font("Arial", Font.BOLD, 16));
-        timetablePanel.add(dateLabel, gbc);
-
-        gbc.gridx = 1;
-        JLabel memberLabel = new JLabel("Member");
-        memberLabel.setFont(new Font("Arial", Font.BOLD, 16));
-        timetablePanel.add(memberLabel, gbc);
-
-        gbc.gridx = 2;
-        JLabel hoursLabel = new JLabel("Working Hours");
-        hoursLabel.setFont(new Font("Arial", Font.BOLD, 16));
-        timetablePanel.add(hoursLabel, gbc);
-
-        workTimetablePanel.add(timetablePanel, BorderLayout.CENTER);
+        JScrollPane scrollPane = new JScrollPane(timetablePanel); // Add scroll pane for better usability
+        workTimetablePanel.add(scrollPane, BorderLayout.CENTER);
 
         JButton generateButton = new JButton("Generate Timetable");
         generateButton.setFont(new Font("Arial", Font.PLAIN, 18));
@@ -812,6 +840,7 @@ public class PanelFactory {
         return workTimetablePanel;
     }
 
+
     private static void generateWorkTimetable(JPanel timetablePanel) {
         timetablePanel.removeAll();
 
@@ -819,7 +848,7 @@ public class PanelFactory {
 
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(5, 5, 5, 5);
-        gbc.anchor = GridBagConstraints.WEST;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
 
         gbc.gridx = 0;
         gbc.gridy = 0;
@@ -837,36 +866,49 @@ public class PanelFactory {
         hoursLabel.setFont(new Font("Arial", Font.BOLD, 16));
         timetablePanel.add(hoursLabel, gbc);
 
-        Random rand = new Random();
-        int maxHoursPerDay = 8;
-
         for (int i = 0; i < 7; i++) {
             LocalDateTime date = sDate.plusDays(i);
             String formattedDate = date.format(dateFormatter);
 
-            for (Member member : members) {
-                Set<String> workHours = new HashSet<>(member.getMIT().getOrDefault(date, new HashSet<>()));
-                workHours.removeAll(member.getMET().getOrDefault(date, new HashSet<>()));
+            Set<String> timeRanges = AutoScheduler.timetable.getTimeRanges(i, date);
 
-                while (workHours.size() < member.getMWH() / 7) {
-                    int startHour = rand.nextInt(24);
-                    int endHour = Math.min(startHour + rand.nextInt(maxHoursPerDay) + 1, 24);
-                    String workHour = String.format("%02d-%02d", startHour, endHour);
+            for (String timeRange : timeRanges) {
+                gbc.gridy++;
+                gbc.gridx = 0;
+                gbc.weightx = 0.3;
+                timetablePanel.add(new JLabel(formattedDate), gbc);
 
-                    if (workHours.stream().noneMatch(wh -> overlaps(wh, workHour))) {
-                        workHours.add(workHour);
+                Member assignedMember = null;
+                for (Member member : members) {
+                    Set<String> mit = member.getMIT().getOrDefault(date, new HashSet<>());
+                    Set<String> met = member.getMET().getOrDefault(date, new HashSet<>());
+
+                    boolean isAvailable = true;
+                    String[] times = timeRange.split("-");
+                    int startHour = Integer.parseInt(times[0]);
+                    int endHour = Integer.parseInt(times[1]);
+
+                    for (int hour = startHour; hour < endHour; hour++) {
+                        String hourRange = String.format("%02d-%02d", hour, hour + 1);
+                        if (met.contains(hourRange) || (!mit.isEmpty() && !mit.contains(hourRange))) {
+                            isAvailable = false;
+                            break;
+                        }
+                    }
+
+                    if (isAvailable) {
+                        assignedMember = member;
+                        break;
                     }
                 }
 
-                gbc.gridx = 0;
-                gbc.gridy++;
-                timetablePanel.add(new JLabel(formattedDate), gbc);
-
                 gbc.gridx = 1;
-                timetablePanel.add(new JLabel(member.getName()), gbc);
+                gbc.weightx = 0.3;
+                timetablePanel.add(new JLabel(assignedMember != null ? assignedMember.getName() : "Unassigned"), gbc);
 
                 gbc.gridx = 2;
-                timetablePanel.add(new JLabel(String.join(", ", workHours)), gbc);
+                gbc.weightx = 0.4;
+                timetablePanel.add(new JLabel(timeRange), gbc);
             }
         }
 
@@ -874,17 +916,8 @@ public class PanelFactory {
         timetablePanel.repaint();
     }
 
-    private static boolean overlaps(String existing, String candidate) {
-        String[] existingTimes = existing.split("-");
-        int existingStart = Integer.parseInt(existingTimes[0]);
-        int existingEnd = Integer.parseInt(existingTimes[1]);
 
-        String[] candidateTimes = candidate.split("-");
-        int candidateStart = Integer.parseInt(candidateTimes[0]);
-        int candidateEnd = Integer.parseInt(candidateTimes[1]);
 
-        return !(candidateEnd <= existingStart || candidateStart >= existingEnd);
-    }
     private static void exportPreset() {
         JFileChooser fileChooser = new JFileChooser();
         int returnValue = fileChooser.showSaveDialog(null);
@@ -914,14 +947,6 @@ public class PanelFactory {
                     writer.write("\n\n");
                 }
 
-                writer.write("# Timetable\n");
-                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-                for (int i = 0; i < 7; i++) {
-                    for (Map.Entry<LocalDateTime, Set<String>> entry : AutoScheduler.timetable.days[i].entrySet()) {
-                        writer.write("<" + entry.getKey().format(formatter) + " : " + String.join(", ", entry.getValue()) + ">\n");
-                    }
-                }
-
                 JOptionPane.showMessageDialog(null, "Preset exported successfully.", "Success", JOptionPane.INFORMATION_MESSAGE);
             } catch (IOException ex) {
                 ex.printStackTrace();
@@ -943,7 +968,7 @@ public class PanelFactory {
                 writer.write("# Timetable\n");
                 DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
                 for (int i = 0; i < 7; i++) {
-                    for (Map.Entry<LocalDateTime, Set<String>> entry : AutoScheduler.timetable.days[i].entrySet()) {
+                    for (Map.Entry<LocalDateTime, Set<String>> entry : AutoScheduler.timetable.days.get(i).entrySet()) {
                         writer.write("<" + entry.getKey().format(formatter) + " : " + String.join(", ", entry.getValue()) + ">\n");
                     }
                 }
